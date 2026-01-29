@@ -24,6 +24,8 @@ function _getCalenderDef() {
  * * @returns {void}
  */
 function main_process() {
+  // 文字数上限の定数
+  const MAX_CHAR_COUNT = 200;
   // カレンダー定義を取得
   const list_calendar = _getCalenderDef();
   // 全プロパティを取得
@@ -81,12 +83,31 @@ function main_process() {
     //
     // 詳細はこちら
     // https://ll-fans.jp/articles/calendar
-    
-    let postText = `【${dateLabel}　今日のラブライブ】\n`;
-    eventTitles.forEach(title => {
-      postText += `${title}\n`;
-    });
-    postText += `\n詳細はリンクを参照\n#lovelive`;
+    let header = `【${dateLabel}　今日のラブライブ】\n`;
+    let footer = `\n詳細はリンクを参照\n#lovelive`;
+    let body = "";
+    let isTruncated = false;
+
+    for (let i = 0; i < eventTitles.length; i++) {
+      const titleLine = `${eventTitles[i]}\n`;
+      
+      // 次のタイトルを追加した場合の合計文字数をシミュレーション
+      // (ヘッダー + 現在のボディ + 次の行 + 「等\n」 + フッター)
+      const potentialLength = (header + body + titleLine + "等\n" + footer).length;
+
+      if (potentialLength > MAX_CHAR_COUNT) {
+        isTruncated = true;
+        break;
+      }
+      body += titleLine;
+    }
+
+    // 最終的な投稿文面の組み立て
+    let postText = header + body;
+    if (isTruncated) {
+      postText += "等\n";
+    }
+    postText += footer;
 
     // 投稿用のアカウント情報
     var userId = PropertiesService.getScriptProperties().getProperty('bsky_uid');
