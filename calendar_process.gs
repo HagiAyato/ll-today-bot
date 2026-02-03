@@ -83,7 +83,7 @@ function main_process() {
     //
     // 詳細はこちら
     // https://ll-fans.jp/articles/calendar
-    let header = `【${dateLabel}　今日のラブライブ】\n`;
+    let header = `【${dateLabel}　今日のラブライブ！】\n`;
     let footer = `\n詳細はリンクを参照\n#lovelive`;
     let body = "";
     let isTruncated = false;
