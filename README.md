@@ -31,7 +31,7 @@ BlueSky APIにログインし、テキスト、外部リンク、サムネイル
 Google Apps Script
 
 ## 実際に動かしているbot紹介
-準備中
+[Blueskyラブライブ！カレンダーbotを作ってみた(+カスタムフィード増やしました)](https://note.com/ayato_nananiji/n/n2fae6f9b310b)
 
 ## 参考記事
 - [GASでBlueskyのBotをつくった備忘録](https://note.com/keiga/n/n527865bcf0d5)
