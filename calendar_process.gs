@@ -1,36 +1,82 @@
 /**
+ * bluesky_defineシートからアカウント設定情報を取得
+ * 1:種類, 2:UIDキー, 3:PASSキー, 4:詳細URL, 5:リンクテキスト, 6:ハッシュタグ, 7以降:カレンダー名
+ * @returns {Array<Object>} アカウント設定オブジェクトの配列
+ */
+function _getAccountConfigs() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('bluesky_define');
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return [];
+
+  // 2行目から最終行まで取得
+  const values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+  return values.map(row => {
+    // G列(インデックス6)以降で、空文字でないカレンダー名のみを抽出
+    const targetCalendars = row.slice(6).filter(name => name !== "");
+    return {
+      type: row[0],         // 種類
+      userId: row[1],       // 送信先アカウントUID（プロパティキー）
+      password: row[2],     // 送信先アカウントPASS（プロパティキー）
+      detailUrl: row[3],    // 詳細URL
+      linkText: row[4],     // リンクテキスト
+      hashtag: row[5],      // ハッシュタグ
+      calendars: targetCalendars
+    };
+  });
+}
+
+/**
  * カレンダー定義を取得
  * 参考：https://note.com/taatn0te/n/nacada2f4dfd2
- * * @returns {Array<Object>} カレンダー情報オブジェクトの配列。各オブジェクトは以下のプロパティを持ちます：
- * @returns {number} return.rss_number RSSフィードに割り当てられた番号
- * @returns {string} return.name フィード名（Blueskyアカウント認証情報検索に使用）
- * @returns {string} return.link RSSフィードのURL
+ * @returns {Object} カレンダー名をキー、CIDを値とするオブジェクト
  */
-function _getCalenderDef() {
-  // feedsシートのA1:B最終行を取得する
+function _getCalendarMap() {
+  // カレンダー定義シートのA1:B最終行を取得する
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('カレンダー定義');
-  const values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
-
-  // mapを使用してオブジェクトの配列を生成
-  return values.map(value => ({
-    name: value[0],
-    cid: value[1]
-  }));
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {};
+  
+  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  
+  // Map形式で保持
+  const calendarMap = {};
+  values.forEach(row => {
+    calendarMap[row[0]] = row[1];
+  });
+  return calendarMap;
 }
 
 /**
  * メイン処理
- * 全カレンダーの予定をすべて取得し、1つの投稿にまとめてBlueskyに送信します。
- * * @returns {void}
+ * 全カレンダーの予定をすべて取得し、アカウントごとに1つの投稿にまとめてBlueskyに送信します。
+ * @returns {void}
  */
 function main_process() {
-  // 文字数上限の定数
-  const MAX_CHAR_COUNT = 200;
-  // カレンダー定義を取得
-  const list_calendar = _getCalenderDef();
+  // 設定情報とカレンダー定義を読み込み
+  const accountConfigs = _getAccountConfigs();
+  const calendarMap = _getCalendarMap();
   // 全プロパティを取得
   const allProps = PropertiesService.getScriptProperties().getProperties();
 
+  // アカウント（設定行）ごとに処理を実行
+  accountConfigs.forEach(config => {
+    Logger.log(`--- アカウント処理開始: ${config.type} ---`);
+    _processAccount(config, calendarMap, allProps);
+  });
+}
+
+/**
+ * 個別のアカウントに対する予定取得と投稿処理
+ * @param {Object} config アカウント設定
+ * @param {Object} calendarMap カレンダー名とプロパティキーの対応
+ * @param {Object} allProps ScriptPropertiesの全データ
+ */
+function _processAccount(config, calendarMap, allProps) {
+  // 文字数上限の定数
+  const MAX_CHAR_COUNT = 200;
+  
   // 取得対象日の設定（今日の日付を取得）
   const targetDate = new Date();
   const dateLabel = Utilities.formatDate(targetDate, 'Asia/Tokyo', 'yyyy/MM/dd');
@@ -40,25 +86,33 @@ function main_process() {
   // 重複判定用（複数のカレンダーに同じ予定がある場合を考慮）
   const processedEventIds = new Set();
 
-  // カレンダーごとに処理
-  for (const calendar of list_calendar) {
-    try {
-      Logger.log(`予定取得中: ${calendar.name}`);
+  // config.calendars に含まれる対象カレンダーごとに処理
+  config.calendars.forEach(calName => {
+    const propKey = calendarMap[calName];
+    if (!propKey) {
+      Logger.log(`警告: ${calName} の定義がカレンダー定義シートに見つかりません。`);
+      return;
+    }
 
-      const cid = allProps[calendar.cid];
+    try {
+      Logger.log(`予定取得中: ${calName}`);
+      const cid = allProps[propKey];
       if (!cid) {
-        Logger.log(`警告: ${calendar.name} のカレンダーIDが見つかりません。`);
-        continue;
+        Logger.log(`警告: ${calName} (キー: ${propKey}) のカレンダーIDがプロパティに見つかりません。`);
+        return;
       }
 
       const myCalendar = CalendarApp.getCalendarById(cid);
       if (!myCalendar) {
         Logger.log(`警告: カレンダーが見つかりません (ID: ${cid})`);
-        continue;
+        return;
       }
 
       // 指定日のイベントを配列として取得
       const events = myCalendar.getEventsForDay(targetDate);
+
+      // 時刻順にソート（開始時刻が早い順）
+      events.sort((a, b) => a.getStartTime() - b.getStartTime());
 
       for (const event of events) {
         const eventId = event.getId();
@@ -80,21 +134,21 @@ function main_process() {
         processedEventIds.add(eventId);
       }
     } catch (e) {
-      Logger.log(`${calendar.name} の処理中にエラーが発生しました：${e.message}`);
+      Logger.log(`${calName} の処理中にエラーが発生しました：${e.message}`);
     }
-  }
+  });
 
   // 予定が1つ以上ある場合のみ投稿
   if (eventStrings.length > 0) {
     // 投稿文面の作成
-    // 【yyyy/mm/dd　今日のラブライブ】
+    // 【yyyy/mm/dd　種類名】
     // 予定タイトル1
     // 予定タイトル2...
     //
     // 詳細はこちら
-    // https://ll-fans.jp/articles/calendar
-    let header = `【${dateLabel}　今日のラブライブ！】\n`;
-    let footer = `\n詳細はリンクを参照\n#lovelive`;
+    // (カレンダーURL)
+    let header = `【${dateLabel}　${config.type}】\n`;
+    let footer = `\n詳細はリンクを参照\n${config.hashtag}`;
     let body = "";
     let isTruncated = false;
 
@@ -113,32 +167,25 @@ function main_process() {
     }
 
     // 最終的な投稿文面の組み立て
-    let postText = header + body;
-    if (isTruncated) {
-      postText += "等\n";
-    }
-    postText += footer;
+    let postText = header + body + (isTruncated ? "等\n" : "") + footer;
 
-    // 投稿用のアカウント情報
-    var userId = PropertiesService.getScriptProperties().getProperty('bsky_uid');
-    var password = PropertiesService.getScriptProperties().getProperty('bsky_pass');
+    // 投稿用のアカウント情報（ScriptPropertiesから実体を取得）
+    const bskyUser = allProps[config.userId];
+    const bskyPass = allProps[config.password];
 
-    if (userId && password) {
+    if (bskyUser && bskyPass) {
       try {
-        const linkUrl = "https://ll-fans.jp/articles/calendar";
-        const linkText = "ラブライブ！カレンダー | LL-Fans";
-
         // Blueskyに投稿
-        postToBlueSky(postText, userId, password, linkText, linkUrl, null, null);
+        postToBlueSky(postText, bskyUser, bskyPass, config.linkText, config.detailUrl, null, null);
         Logger.log(`投稿文: ${postText}`);
-        Logger.log(`一括投稿完了: ${eventStrings.length}件の予定を投稿しました。`);
+        Logger.log(`一括投稿完了 [${config.type}]: ${eventStrings.length}件の予定を投稿しました。`);
       } catch (e) {
-        Logger.log(`Blueskyへの投稿に失敗しました：${e.message}`);
+        Logger.log(`Blueskyへの投稿に失敗しました [${config.type}]：${e.message}`);
       }
     } else {
-      Logger.log("エラー: 投稿用のアカウント情報（userId/password）が見つかりません。");
+      Logger.log(`エラー: 投稿用のアカウント情報（${config.userId}）が見つかりません。`);
     }
   } else {
-    Logger.log("本日の予定はありませんでした。");
+    Logger.log(`[${config.type}] 本日の予定はありませんでした。`);
   }
 }
