@@ -1,11 +1,11 @@
 # ll-today-bot
 
 ## 概要
-LL-Fansのラブライブ！カレンダーをもとに、毎日今日のラブライブ！の予定をBlueSkyに投稿するGoogle Apps Scriptプロジェクトです。
+LL-Fansのラブライブ！カレンダーおよびvα-livのスケジュールをもとに、毎日今日の予定をBlueSkyに投稿するGoogle Apps Scriptプロジェクトです。
 
 ## 構成ファイル
 - [`calendar_process.gs`](calendar_process.gs)
-  LL-Fansのカレンダー定義から今日の予定を取得し、1つの投稿にまとめてBlueSkyに送信するメイン処理を行います。
+  LL-Fansおよびvα-livのカレンダー定義から今日の予定を取得し、1つの投稿にまとめてBlueSkyに送信するメイン処理を行います。
 - [`post_bluesky.gs`](post_bluesky.gs)
   BlueSky APIを利用して、テキストと外部リンク情報をBlueSkyに投稿します。ハッシュタグのFacet生成やサムネイル画像のアップロードに対応しています。
 - [`appsscript.json`](appsscript.json)
@@ -17,7 +17,7 @@ LL-Fansのラブライブ！カレンダーをもとに、毎日今日のラブ�
 
 ### カレンダー予定の取得と投稿
 [`main_process`](calendar_process.gs)  
-LL-Fansのカレンダー定義から該当するカレンダーのID情報を取得し、今日の全イベントを取得。取得したイベント情報をBlueSkyに投稿します。
+LL-Fansおよびvα-livのカレンダー定義から該当するカレンダーのID情報を取得し、今日の全イベントを取得。取得したイベント情報をBlueSkyに投稿します。
 
 ### BlueSkyへの投稿
 [`postToBlueSky`](post_bluesky.gs)  
