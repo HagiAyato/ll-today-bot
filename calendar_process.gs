@@ -30,13 +30,13 @@ function main_process() {
   const list_calendar = _getCalenderDef();
   // 全プロパティを取得
   const allProps = PropertiesService.getScriptProperties().getProperties();
-  
+
   // 取得対象日の設定（今日の日付を取得）
   const targetDate = new Date();
   const dateLabel = Utilities.formatDate(targetDate, 'Asia/Tokyo', 'yyyy/MM/dd');
 
-  // 全イベントのタイトルを格納するリスト
-  const eventTitles = [];
+  // 全イベントのタイトル・時刻を含めた文字列を格納するリスト
+  const eventStrings = [];
   // 重複判定用（複数のカレンダーに同じ予定がある場合を考慮）
   const processedEventIds = new Set();
 
@@ -44,7 +44,7 @@ function main_process() {
   for (const calendar of list_calendar) {
     try {
       Logger.log(`予定取得中: ${calendar.name}`);
-      
+
       const cid = allProps[calendar.cid];
       if (!cid) {
         Logger.log(`警告: ${calendar.name} のカレンダーIDが見つかりません。`);
@@ -56,17 +56,27 @@ function main_process() {
         Logger.log(`警告: カレンダーが見つかりません (ID: ${cid})`);
         continue;
       }
-      
+
       // 指定日のイベントを配列として取得
       const events = myCalendar.getEventsForDay(targetDate);
-      
+
       for (const event of events) {
         const eventId = event.getId();
         // 重複チェック（複数カレンダー共有予定など）
         if (processedEventIds.has(eventId)) continue;
 
-        const title = event.getTitle();
-        eventTitles.push(title);
+        let displayTitle = "";
+
+        if (event.isAllDayEvent()) {
+          // 終日の場合はタイトルのみ
+          displayTitle = event.getTitle();
+        } else {
+          // 終日でない場合は「HH:mm〜 タイトル」の形式
+          const startTime = Utilities.formatDate(event.getStartTime(), 'Asia/Tokyo', 'HH:mm');
+          displayTitle = `${startTime}〜 ${event.getTitle()}`;
+        }
+
+        eventStrings.push(displayTitle);
         processedEventIds.add(eventId);
       }
     } catch (e) {
@@ -75,7 +85,7 @@ function main_process() {
   }
 
   // 予定が1つ以上ある場合のみ投稿
-  if (eventTitles.length > 0) {
+  if (eventStrings.length > 0) {
     // 投稿文面の作成
     // 【yyyy/mm/dd　今日のラブライブ】
     // 予定タイトル1
@@ -88,9 +98,9 @@ function main_process() {
     let body = "";
     let isTruncated = false;
 
-    for (let i = 0; i < eventTitles.length; i++) {
-      const titleLine = `${eventTitles[i]}\n`;
-      
+    for (let i = 0; i < eventStrings.length; i++) {
+      const titleLine = `${eventStrings[i]}\n`;
+
       // 次のタイトルを追加した場合の合計文字数をシミュレーション
       // (ヘッダー + 現在のボディ + 次の行 + 「等\n」 + フッター)
       const potentialLength = (header + body + titleLine + "等\n" + footer).length;
@@ -117,11 +127,11 @@ function main_process() {
       try {
         const linkUrl = "https://ll-fans.jp/articles/calendar";
         const linkText = "ラブライブ！カレンダー | LL-Fans";
-        
+
         // Blueskyに投稿
         postToBlueSky(postText, userId, password, linkText, linkUrl, null, null);
         Logger.log(`投稿文: ${postText}`);
-        Logger.log(`一括投稿完了: ${eventTitles.length}件の予定を投稿しました。`);
+        Logger.log(`一括投稿完了: ${eventStrings.length}件の予定を投稿しました。`);
       } catch (e) {
         Logger.log(`Blueskyへの投稿に失敗しました：${e.message}`);
       }
