@@ -81,8 +81,8 @@ function _processAccount(config, calendarMap, allProps) {
   const targetDate = new Date();
   const dateLabel = Utilities.formatDate(targetDate, 'Asia/Tokyo', 'yyyy/MM/dd');
 
-  // 全イベントのタイトル・時刻を含めた文字列を格納するリスト
-  const eventStrings = [];
+  // 全イベントのオブジェクトを格納するリスト（ソート用）
+  const allEvents = [];
   // 重複判定用（複数のカレンダーに同じ予定がある場合を考慮）
   const processedEventIds = new Set();
 
@@ -111,30 +111,32 @@ function _processAccount(config, calendarMap, allProps) {
       // 指定日のイベントを配列として取得
       const events = myCalendar.getEventsForDay(targetDate);
 
-      // 時刻順にソート（開始時刻が早い順）
-      events.sort((a, b) => a.getStartTime() - b.getStartTime());
-
       for (const event of events) {
         const eventId = event.getId();
         // 重複チェック（複数カレンダー共有予定など）
         if (processedEventIds.has(eventId)) continue;
 
-        let displayTitle = "";
-
-        if (event.isAllDayEvent()) {
-          // 終日の場合はタイトルのみ
-          displayTitle = event.getTitle();
-        } else {
-          // 終日でない場合は「HH:mm〜 タイトル」の形式
-          const startTime = Utilities.formatDate(event.getStartTime(), 'Asia/Tokyo', 'HH:mm');
-          displayTitle = `${startTime}〜 ${event.getTitle()}`;
-        }
-
-        eventStrings.push(displayTitle);
+        // あとでソートするためにイベントオブジェクトのまま保存
+        allEvents.push(event);
         processedEventIds.add(eventId);
       }
     } catch (e) {
       Logger.log(`${calName} の処理中にエラーが発生しました：${e.message}`);
+    }
+  });
+
+  // 異なるカレンダーの予定が混ざるため、開始時刻順に一括ソート
+  allEvents.sort((a, b) => a.getStartTime() - b.getStartTime());
+
+  // ソートされたイベントを投稿用の文字列リストに変換
+  const eventStrings = allEvents.map(event => {
+    if (event.isAllDayEvent()) {
+      // 終日の場合はタイトルのみ
+      return event.getTitle();
+    } else {
+      // 終日でない場合は「HH:mm〜 タイトル」の形式
+      const startTime = Utilities.formatDate(event.getStartTime(), 'Asia/Tokyo', 'HH:mm');
+      return `${startTime}〜 ${event.getTitle()}`;
     }
   });
 
