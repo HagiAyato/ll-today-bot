@@ -125,8 +125,16 @@ function _processAccount(config, calendarMap, allProps) {
     }
   });
 
-  // 異なるカレンダーの予定が混ざるため、開始時刻順に一括ソート
-  allEvents.sort((a, b) => a.getStartTime() - b.getStartTime());
+  // 1. 開始時刻順（昇順）
+  // 2. 開始時刻が同じなら予定名順（昇順）
+  allEvents.sort((a, b) => {
+    const timeDiff = a.getStartTime() - b.getStartTime();
+    if (timeDiff !== 0) {
+      return timeDiff;
+    }
+    // 時刻が同じ場合、予定名を比較
+    return a.getTitle().localeCompare(b.getTitle(), 'ja');
+  });
 
   // ソートされたイベントを投稿用の文字列リストに変換
   const eventStrings = allEvents.map(event => {
